@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // hashed
+  role      String   @default("viewer") // "viewer", "collector", "state_admin"
+  state     String   // e.g., "Rajasthan"
+  district  String?  // e.g., "Ajmer" - null if state-level
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([state])
+}
+
+model District {
+  id    String @id @default(cuid())
+  state String
+  name  String
+  code  String @unique
+
+  snapshots Snapshot[]
+  flags     Flag[]
+  briefings Briefing[]
+
+  @@unique([state, code])
+  @@index([state])
+}
+
+model Snapshot {
+  id                 String   @id @default(cuid())
+  districtId         String
+  year               Int
+  totalVillages      Int
+  zeroFhtcVillages   Int      // 0% FHTC bucket
+  fullFhtcVillages   Int      // 100% FHTC bucket
+  otherBuckets       Json     // JSON: { "0-25": 100, "25-50": 50, "50-75": 30, "75-100": 20 }
+  fetchedAt          DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  district District @relation(fields: [districtId], references: [id], onDelete: Cascade)
+
+  @@unique([districtId, year])
+  @@index([districtId])
+  @@index([year])
+}
+
+model Flag {
+  id           String   @id @default(cuid())
+  districtId   String
+  type         String   // "high_zero_fhtc" | "tension" | "yoy_regression" | "outlier"
+  severity     Int      @default(3) // 1-5, 5 = highest
+  score        Int      // 0-100
+  explanation  String
+  evidence     Json     // JSON object with supporting data
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  district District @relation(fields: [districtId], references: [id], onDelete: Cascade)
+
+  @@index([districtId])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model Briefing {
+  id        String   @id @default(cuid())
+  districtId String
+  language  String   // "hi" | "en"
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  district District @relation(fields: [districtId], references: [id], onDelete: Cascade)
+
+  @@unique([districtId, language])
+  @@index([districtId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String   // "ingest_sync" | "anomaly_score" | "briefing_generate" | etc.
+  inputHash      String   // SHA256 of input
+  outputHash     String   // SHA256 of output
+  model          String?  // "gpt-4" | null if no LLM
+  promptVersion  String?  // version of prompt template
+  metadata       Json?    // additional context
+  createdAt      DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
