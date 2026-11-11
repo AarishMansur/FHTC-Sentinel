@@ -43,3 +43,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'sync_failed' }, { status: 500 });
   }
 }
+
+/**
+ * Cron entry point. Vercel Cron (and most schedulers) issue GET requests and
+ * authenticate with `Authorization: Bearer <CRON_SECRET>` — no cookie is
+ * available, so this endpoint is cron-secret-only and never accepts a user
+ * session. Source/finyear come from the query string.
+ */
+export async function GET(req: Request) {
+  if (!isCronSecretValid(getCronSecret(req))) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const url = new URL(req.url);
+  const state = url.searchParams.get('state') || process.env.SYNC_STATE || 'Rajasthan';
+  const source = url.searchParams.get('source') === 'esri' ? 'esri' : 'hargharjal';
+  const finyearParam = url.searchParams.get('finyear');
+  const finyear = finyearParam && /^\d{4}-\d{2,4}$/.test(finyearParam) ? finyearParam : undefined;
+
+  try {
+    const result = source === 'esri' ? await ingestState(state) : await ingestHarGharJal(state, { finyear });
+    if (!result.success) {
+      return NextResponse.json({ error: 'sync_failed', result }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, result });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'sync_failed' }, { status: 500 });
+  }
+}
