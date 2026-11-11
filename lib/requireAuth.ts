@@ -40,6 +40,13 @@ export function authErrorResponse(e: unknown) {
 }
 
 export function getCronSecret(req: Request) {
+  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`; self-hosted cron
+  // setups typically send a custom `x-cron-secret` header. Accept both.
+  const bearer = req.headers.get('authorization');
+  if (bearer) {
+    const m = bearer.match(/^Bearer\s+(.+)$/i);
+    if (m) return m[1].trim();
+  }
   return req.headers.get('x-cron-secret') || null;
 }
 
