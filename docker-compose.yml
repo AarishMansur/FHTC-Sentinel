@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fhtc
+    ports:
+      - '5432:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: sh -c "npx prisma db push && npm run db:seed && npm run dev"
+    volumes:
+      - .:/app
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fhtc
+      - JWT_SECRET=${JWT_SECRET:-dev_only_jwt_secret_change_me_min_20_chars}
+      - CRON_SECRET=${CRON_SECRET:-dev_only_cron_secret_change_me}
+      - ESRI_BASE_URL=${ESRI_BASE_URL:-https://services.arcgis.com/your_org/arcgis/rest/services/JJM_FHTC_Districts/FeatureServer/0}
+      - SYNC_URL=${SYNC_URL:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
